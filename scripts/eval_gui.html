@@ -346,7 +346,7 @@ const CHECKS=[
  ['arms','Both arms respond','Every motor in the left and right arm answers. Nothing moves.',[['Check','arms']]],
  ['cameras','Cameras','Top camera plus the two wrist cameras.',[['Capture','cameras']]],
  ['router','Router connection','The Colosseum server that assigns policies and stores results.',[['Check','router']]],
- ['keys','AI API keys','Keys for the GPT, Grok and Claude policies. Claude also writes the review feedback.',[['API keys…','__keys'],['Verify','keys']]],
+ ['keys','AI API keys','Keys for the GPT, Grok, Claude and Gemini policies. Claude also writes the review feedback.',[['API keys…','__keys'],['Verify','keys']]],
  ['server','Policy Server','Runs the policies on this computer.',[['Start','server'],['Stop','server_stop']]],
 ];
 const REQUIRED=['can','arms','cameras','router','keys','server'];
@@ -419,7 +419,7 @@ $('#offBtn').onclick=()=>{const on=!ST.offline;
   api('/api/offline',{on}).then(()=>toast(on?'Offline mode: nothing will be uploaded.':'Back online. Checking the Router…')).catch(e=>toast(e.message))};
 
 function openKeys(){
-  const rows=ST&&ST.keys&&ST.keys.length?ST.keys:[{provider:'openai',label:'OpenAI · GPT'},{provider:'xai',label:'xAI · Grok'},{provider:'anthropic',label:'Anthropic · Claude'}];
+  const rows=ST&&ST.keys&&ST.keys.length?ST.keys:[{provider:'openai',label:'OpenAI · GPT'},{provider:'xai',label:'xAI · Grok'},{provider:'anthropic',label:'Anthropic · Claude'},{provider:'google',label:'Google · Gemini'}];
   $('#keyInputs').innerHTML=rows.map(k=>{const login=k.source=='Claude Code login';
     return `<label for="key-${k.provider}">${esc(k.label)} ${k.source?`<span style="text-transform:none;font-weight:400">· ${login?'using the Claude Code login':'key saved'}${k.ok?' ✓':''}</span>`:''}</label>
     <div class="row" style="flex-wrap:nowrap"><input id="key-${k.provider}" type="password" autocomplete="off" spellcheck="false" placeholder="${login?'leave empty to keep using the Claude Code login':k.source?'leave empty to keep the saved key':'paste key'}">

@@ -88,10 +88,10 @@ software STOP is not an emergency stop, so keep the physical stop within reach.
 ### LLM relay credentials
 
 The Router supplies each LLM's API URL; no Client base-URL setting is needed.
-`llm_api_keys.openai`, `.xai`, and `.anthropic` select credentials by the assigned
-model name (`gpt-*`, `grok-*`, `claude-*`), including when all three use one relay
-host. Use that relay's respective keys, not unrelated official-provider keys.
-For example:
+`llm_api_keys.openai`, `.xai`, `.anthropic`, and `.google` select credentials by the
+assigned model name (`gpt-*`, `grok-*`, `claude-*`, `gemini-*`), including when they
+all use one relay host. Use that relay's respective keys, not unrelated
+official-provider keys. For example:
 
 ```yaml
 llm_api_keys:

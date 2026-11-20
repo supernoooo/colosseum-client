@@ -632,9 +632,10 @@ and readiness. The verification server still simulates model preparation and inf
 
 ## Cloud LLM keys
 
-Optional `llm_api_keys` maps `openai`, `xai`, and `anthropic` to direct key
-strings or `env:VARIABLE` references. Empty/unset references do not enable a
-provider. Do not configure `llm_access_token`; it is not used.
+Optional `llm_api_keys` maps `openai`, `xai`, `anthropic`, and `google` to direct
+key strings or `env:VARIABLE` references. The assigned model's name prefix picks
+the key: `gpt-`, `grok-`, `claude-`, or `gemini-`. Empty/unset references do not
+enable a provider. Do not configure `llm_access_token`; it is not used.
 
 The Client sends only the configured provider API URLs in `POST /api/eval/next`.
 An updated Router excludes all LLM policies when that list is absent. For a

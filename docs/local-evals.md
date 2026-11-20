@@ -1,9 +1,9 @@
 # YAM evaluations with local VLAs: record A/B, review, then submit
 
 The five VLAs (G05, GR00T, MolmoAct2, LingBot, pi05) run as local checkpoints
-on this machine's GPU. The three LLM policies (GPT, Grok, Claude) run through
-their APIs and the local Policy Server, using Inspect Robots with `joint_pos`
-actions. Both LLMs and VLAs use the Router's 14-value `joint_position`
+on this machine's GPU. The LLM policies (GPT, Grok, Claude Opus, Claude Fable
+and Gemini) run through their APIs and the local Policy Server, using Inspect
+Robots with `joint_pos` actions. Both LLMs and VLAs use the Router's 14-value `joint_position`
 contract: six joints and one gripper for each arm. The Client drives both
 policy types through its calibrated YAM joint driver. The Router assigns the
 model and run IDs. Scores, videos and datasets are submitted only when you
@@ -23,11 +23,12 @@ are checked out side by side.
 
 - Client config: `configs/robot.yam-joint-llm.yaml`, used for recording and review.
 - Policy Server config: `local/local-runtime-yam-agent-joint.yaml`. It holds the
-  5 VLA and 3 LLM entries. Each VLA has a `launcher` that starts its checkpoint
+  5 VLA and 5 LLM entries. Each VLA has a `launcher` that starts its checkpoint
   on a local port (8202–8206). Each LLM has `control_mode: joint_pos`.
 - Both configs share the same calibrated 12-joint bounds and `joint_max_step`.
   The Client's joint clipping applies to LLM and VLA actions alike.
-- GPT, Grok and Claude use your official OpenAI, xAI and Anthropic API keys.
+- GPT, Grok, Claude and Gemini use your official OpenAI, xAI, Anthropic and
+  Google Gemini API keys.
 
 Both config files are git-ignored because they contain a Router token and
 machine-specific paths.
@@ -38,7 +39,7 @@ loads, for up to 10 minutes (`start_timeout_seconds: 600`). Worker logs go to
 the Policy Server's `local-policy-logs/`.
 
 > [!WARNING]
-> Before a physical LLM trial, verify that the three LLM `name`, `url` and
+> Before a physical LLM trial, verify that the LLM `name`, `url` and
 > `revision` values in the Policy Server config exactly match the current Router
 > registrations. Also check the joint limits and gripper calibration against the
 > rig. Keep the robot attended, with the emergency stop within reach.
@@ -67,6 +68,7 @@ the Policy Server's `local-policy-logs/`.
    export OPENAI_API_KEY=...
    export XAI_API_KEY=...
    export ANTHROPIC_API_KEY=...
+   export GEMINI_API_KEY=...
    ```
 4. Install `ffmpeg`, which the review page uses to encode preview videos.
 
@@ -107,10 +109,12 @@ uv pip install --python .venv/bin/python -e '.[gui]'   # once
 
 - It defaults to the joint configs above. It starts the Policy Server (`--server-dir`,
   `--server-config`) and stops it when you press Ctrl-C, which frees the GPU.
-- **API keys…** saves the OpenAI, xAI and Anthropic keys to `local/llm-keys.env` (owner-only).
-  **Verify** checks each key with its provider, without spending tokens. The Router is offered
-  only the LLMs whose key works. If a key fails, the card turns red and names it. The Anthropic
-  key is used both for the Claude policy and to write feedback.
+- **API keys…** saves the OpenAI, xAI, Anthropic and Google Gemini keys to `local/llm-keys.env`
+  (owner-only). **Verify** checks each key with its provider, without spending tokens. Only the
+  providers of LLMs in the Policy Server config need a key; to skip a provider you have no key for,
+  delete its LLMs from that config. The Router is offered only the LLMs whose key works. If a key
+  fails, the card turns red and names it. The Anthropic key is used both for the Claude policy and
+  to write feedback.
 - **Bring CAN up** asks for your password in a system pop-up. **Both arms respond** reads each
   motor's registers without powering it.
 - **STOP POLICY** (or Esc) ends the current run at once. Even an action already on its way is held
@@ -167,7 +171,7 @@ sends only the assigned model's key to the Policy Server.
 
 ```bash
 cd ~/colosseum-client
-source local/llm-keys.env          # sets OPENAI_API_KEY, XAI_API_KEY and ANTHROPIC_API_KEY
+source local/llm-keys.env          # sets OPENAI_API_KEY, XAI_API_KEY, ANTHROPIC_API_KEY and GEMINI_API_KEY
 .venv/bin/python scripts/record_evals.py configs/robot.yam-joint-llm.yaml --scene '<scene>'
 ```
 

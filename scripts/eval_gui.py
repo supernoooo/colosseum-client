@@ -47,6 +47,7 @@ import record_evals  # noqa: E402
 import review_evals as rv  # noqa: E402
 
 import colosseum_client.evaluation as ev  # noqa: E402
+from colosseum_client.llm_credentials import model_provider  # noqa: E402
 from colosseum_client.robot_config import RobotClientConfig  # noqa: E402
 
 CAMS = rv.CAMS
@@ -442,19 +443,21 @@ def check_router():
 
 # provider -> (label, variable in the keys file)
 PROVIDERS = {'openai': ('OpenAI · GPT', 'OPENAI_API_KEY'), 'xai': ('xAI · Grok', 'XAI_API_KEY'),
-             'anthropic': ('Anthropic · Claude', 'ANTHROPIC_API_KEY')}
+             'anthropic': ('Anthropic · Claude', 'ANTHROPIC_API_KEY'),
+             'google': ('Google · Gemini', 'GEMINI_API_KEY')}
 KEYS = {}        # provider -> key, loaded from --llm-keys
 KEY_OK = set()   # providers whose key passed the last verification
 CLAUDE_LOGIN = [False]  # Claude runs on the Claude Code login (no Anthropic key saved) and it works
 
 
-def llm_policies():
-    """Whether the Policy Server config serves any cloud LLM policy (they are the ones that need API keys)."""
+def llm_providers_served():
+    """Providers of the cloud LLM policies in the Policy Server config: only their API keys are needed."""
     try:
         raw = yaml.safe_load((ARGS.server_dir / ARGS.server_config).read_text()) or {}
     except OSError:
-        return True
-    return any(m.get('model_type', 'vla') != 'vla' for m in raw.get('models') or [])
+        return set(PROVIDERS)
+    return {model_provider(str(m.get('name', ''))) for m in raw.get('models') or []
+            if m.get('model_type', 'vla') != 'vla'} - {None}
 
 
 def verify_key(provider, key):
@@ -471,12 +474,13 @@ def verify_key(provider, key):
             except anthropic.APIStatusError as e:
                 return False, f'error {e.status_code}'
             return True, 'works'
-        url = {'openai': 'https://api.openai.com/v1/models', 'xai': 'https://api.x.ai/v1/models'}[provider]
+        url = {'openai': 'https://api.openai.com/v1/models', 'xai': 'https://api.x.ai/v1/models',
+               'google': 'https://generativelanguage.googleapis.com/v1beta/openai/models'}[provider]
         r = httpx.get(url, headers={'Authorization': f'Bearer {key}'}, timeout=20)
     except httpx.HTTPError:
         return False, 'could not reach the provider'
-    if r.status_code in (401, 403):
-        return False, 'rejected'
+    if r.status_code in (401, 403) or (provider == 'google' and r.status_code == 400):
+        return False, 'rejected'  # Google answers an invalid key with 400 INVALID_ARGUMENT
     return (True, 'works') if r.is_success else (False, f'error {r.status_code}')
 
 
@@ -500,13 +504,14 @@ def check_keys():
             S.touch()
         return S.set_check('keys', 'ok', 'Not needed offline: cloud LLM policies are left out.')
     S.set_check('keys', 'running', 'Checking each API key with its provider…')
-    needed = llm_policies()
+    served = llm_providers_served()
+    needed = bool(served)
     rows, problems = [], []
     CLAUDE_LOGIN[0] = False
     for provider, (label, _) in PROVIDERS.items():
         key = KEYS.get(provider, '')
-        if not key and not needed and provider != 'anthropic':
-            continue  # no LLM policy to serve; only Claude matters, for the review feedback
+        if not key and provider not in served and provider != 'anthropic':
+            continue  # no policy of this provider to serve; Claude still matters, for the review feedback
         ok, msg = verify_key(provider, key) if key else (False, 'missing')
         (KEY_OK.add if ok else KEY_OK.discard)(provider)
         shown = 'API key' if key else ''  # how it authenticates; no part of a key leaves this process
@@ -514,7 +519,7 @@ def check_keys():
             ok, msg = claude_login()
             CLAUDE_LOGIN[0], shown = ok, 'Claude Code login'
         rows.append({'provider': provider, 'label': label, 'ok': ok, 'msg': msg, 'source': shown})
-        if not ok:
+        if not ok and (provider in served or provider == 'anthropic'):  # a key no policy uses can't block
             problems.append(f'{label}: {msg}' if shown == 'Claude Code login' else f'{label} key {msg}')
     with S.lock:
         S.keys = rows
@@ -524,7 +529,8 @@ def check_keys():
     if not needed:
         return S.set_check('keys', 'ok', 'Not needed by these policies (no cloud LLM). Claude writes the review '
                                          'feedback' + ('.' if not problems else ' once a key or login works.'))
-    S.set_check('keys', 'ok', 'All keys work' + (' (Claude via the Claude Code login)' if CLAUDE_LOGIN[0] else ''))
+    S.set_check('keys', 'ok', 'All needed keys work'
+                + (' (Claude via the Claude Code login)' if CLAUDE_LOGIN[0] else ''))
 
 
 def save_keys(new):
@@ -820,15 +826,16 @@ PROMPTS_SYS = _Sys()
 
 
 def record_thread(form):
-    # The Router assigns LLM policies to stations that offer LLM credentials, so offer them only when
-    # this Policy Server serves an LLM policy; otherwise it would get a model it cannot run.
-    serves_llm = llm_policies()
+    # The Router assigns LLM policies to stations that offer LLM credentials, so offer only the providers
+    # whose LLM policies this Policy Server serves; otherwise it would get a model it cannot run.
+    served = llm_providers_served()
     config = replace(CONFIG, track='open', instruction=form.get('instruction', '').strip(),
                      scene=form.get('scene', '').strip() or CONFIG.scene,
                      evaluator=form.get('evaluator', '').strip() or CONFIG.evaluator,
                      max_trial_steps=int(form.get('max_steps') or CONFIG.max_trial_steps),
-                     llm_api_keys={p: KEYS[p] for p in KEY_OK if p in KEYS} if serves_llm else {},
-                     llm_account_logins={'anthropic': 'claude-code'} if CLAUDE_LOGIN[0] and serves_llm else {})
+                     llm_api_keys={p: KEYS[p] for p in KEY_OK & served if p in KEYS},
+                     llm_account_logins={'anthropic': 'claude-code'} if CLAUDE_LOGIN[0] and 'anthropic' in served
+                     else {})
     resume = form.get('resume') or None
     offline.ACTIVE = offline.is_offline(resume) if resume else OFFLINE[0]
     S.set_run(phase='starting', side=None, step=0, max_steps=config.max_trial_steps, eval_id=resume,
